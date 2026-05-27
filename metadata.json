@@ -1,0 +1,6 @@
+{
+  "name": "Ikaze Access",
+  "description": "An AI-powered disability economic empowerment ecosystem and SaaS platform designed for professional networking, remote jobs, and assistive devices.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
