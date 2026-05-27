@@ -8,14 +8,17 @@ import {
   Briefcase,
   ChevronRight,
   Coins,
+  Facebook,
   FileText,
   HelpCircle,
   Info,
+  Instagram,
   Layers,
   LayoutDashboard,
   Lightbulb,
   ListFilter,
   LogIn,
+  Mail,
   MapPin,
   Menu,
   Phone,
@@ -26,6 +29,7 @@ import {
   Sliders,
   Sparkles,
   TrendingUp,
+  Twitter,
   X
 } from "lucide-react";
 
@@ -54,6 +58,23 @@ export default function App() {
     return null;
   });
   const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [isSupportOpen, setIsSupportOpen] = useState(false);
+  const [copiedPhone, setCopiedPhone] = useState(false);
+  const [copiedEmail, setCopiedEmail] = useState(false);
+
+  const handleCopy = (text: string, type: "phone" | "email") => {
+    navigator.clipboard.writeText(text).then(() => {
+      if (type === "phone") {
+        setCopiedPhone(true);
+        setTimeout(() => setCopiedPhone(false), 2000);
+      } else {
+        setCopiedEmail(true);
+        setTimeout(() => setCopiedEmail(false), 2000);
+      }
+    }).catch(() => {
+      // Basic fallback
+    });
+  };
 
   // Accessibility Options state
   const [prefContrast, setPrefContrast] = useState<"slate" | "high-contrast" | "eye-care" | "bandwidth">("slate");
@@ -1455,24 +1476,145 @@ export default function App() {
       </div>
 
       {/* Footer landmarks layout */}
-      <footer className={`border-t ${prefContrast === "high-contrast" ? "border-white border-t-4" : "border-slate-805"} transition-colors shrink-0 bg-slate-950/40 mt-auto`}>
-        <div className="max-w-7xl mx-auto px-4 py-6 md:py-8 flex flex-col md:flex-row items-center justify-between gap-4 text-xs">
-          <div className="text-slate-500 leading-relaxed">
-            <p className="text-slate-400 font-bold flex flex-wrap items-center gap-2">
+      <footer className={`border-t ${prefContrast === "high-contrast" ? "border-white border-t-4" : "border-slate-805"} transition-colors shrink-0 bg-slate-950/60 mt-auto`}>
+        
+        {/* Support Grid & Help Desk Block */}
+        <div className="max-w-7xl mx-auto px-4 pt-10 pb-8 border-b border-slate-805/40">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-xs font-sans text-left">
+            
+            {/* Location block */}
+            <div className="space-y-3">
+              <h5 className="text-xs uppercase tracking-wider font-extrabold font-mono text-cyan-400 flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-rose-500 shrink-0" />
+                Our Location
+              </h5>
+              <div className="p-3.5 rounded-xl bg-slate-950/50 border border-slate-850/40 space-y-1.5 text-slate-300">
+                <p className="font-bold text-white leading-tight">Nyarugenge District, Kigali City, Rwanda</p>
+                <p className="text-[11px] text-slate-400 leading-normal">
+                  Our regional office and workshop is located right in the heart of Kigali City. We build custom mechanical keyboard overlays, assistive switches, and localized WCAG feedback engines.
+                </p>
+              </div>
+            </div>
+
+            {/* Direct support message channels */}
+            <div className="space-y-3">
+              <h5 className="text-xs uppercase tracking-wider font-extrabold font-mono text-cyan-400 flex items-center gap-2">
+                <Phone className="w-4 h-4 text-emerald-400 shrink-0" />
+                Text or Call Support
+              </h5>
+              <div className="p-3.5 rounded-xl bg-slate-950/50 border border-slate-850/40 space-y-3.5 text-slate-300">
+                <div className="space-y-1">
+                  <span className="text-[10px] uppercase text-slate-500 font-mono tracking-wider block">Phone & SMS Hotline</span>
+                  <div className="flex items-center justify-between gap-2 bg-slate-900/40 p-1.5 px-2.5 rounded-lg border border-slate-850/20">
+                    <a 
+                      href="tel:078422351" 
+                      onClick={() => handleCopy("078422351", "phone")}
+                      className="text-sm font-bold text-white hover:text-cyan-400 transition-colors flex items-center gap-1.5"
+                    >
+                      078422351
+                    </a>
+                    <button
+                      onClick={() => handleCopy("078422351", "phone")}
+                      className="px-2 py-1 rounded bg-slate-950 hover:bg-slate-900 text-[10px] text-cyan-400 hover:text-white border border-slate-800 transition-all cursor-pointer inline-flex items-center gap-1 shrink-0 font-mono"
+                      title="Copy phone to clipboard"
+                    >
+                      {copiedPhone ? "✓ Copied!" : "📋 Copy"}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-1 border-t border-slate-850/30 pt-2.5">
+                  <span className="text-[10px] uppercase text-slate-500 font-mono tracking-wider block">Direct Support Email</span>
+                  <div className="flex items-center justify-between gap-2 bg-slate-900/40 p-1.5 px-2.5 rounded-lg border border-slate-850/20">
+                    <a 
+                      href="mailto:mugabeprince1@gmail.com" 
+                      onClick={() => handleCopy("mugabeprince1@gmail.com", "email")}
+                      className="text-xs font-bold text-white hover:text-cyan-400 transition-colors block truncate"
+                    >
+                      mugabeprince1@gmail.com
+                    </a>
+                    <button
+                      onClick={() => handleCopy("mugabeprince1@gmail.com", "email")}
+                      className="px-2 py-1 rounded bg-slate-950 hover:bg-slate-900 text-[10px] text-cyan-400 hover:text-white border border-slate-800 transition-all cursor-pointer inline-flex items-center gap-1 shrink-0 font-mono"
+                      title="Copy email to clipboard"
+                    >
+                      {copiedEmail ? "✓ Copied!" : "📋 Copy"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Social DM networks */}
+            <div className="space-y-3">
+              <h5 className="text-xs uppercase tracking-wider font-extrabold font-mono text-cyan-400 flex items-center gap-2">
+                <Activity className="w-4 h-4 text-cyan-400 shrink-0" />
+                Follow & Connect With Us
+              </h5>
+              <div className="p-3.5 rounded-xl bg-slate-950/50 border border-slate-850/40 space-y-2 text-slate-300">
+                <p className="text-[11px] text-slate-400 leading-normal mb-1">Send a direct message on any of our official socials:</p>
+                
+                <div className="grid grid-cols-3 gap-1.5 text-[10.5px]">
+                  <a 
+                    href="https://instagram.com/cacy2_50" 
+                    target="_blank" 
+                    rel="noreferrer" 
+                    className="flex flex-col items-center justify-center p-2 rounded-lg bg-slate-900 border border-slate-805 hover:border-cyan-500/30 text-center hover:text-white transition-all text-slate-450"
+                    title="Instagram @cacy2_50"
+                  >
+                    <Instagram className="w-4 h-4 text-purple-400 mb-1" />
+                    <span className="truncate w-full font-semibold font-mono font-bold">@cacy2_50</span>
+                  </a>
+
+                  <a 
+                    href="https://facebook.com/mugabeprince" 
+                    target="_blank" 
+                    rel="noreferrer" 
+                    className="flex flex-col items-center justify-center p-2 rounded-lg bg-slate-900 border border-slate-805 hover:border-cyan-500/30 text-center hover:text-white transition-all text-slate-450"
+                    title="Facebook @mugabeprince"
+                  >
+                    <Facebook className="w-4 h-4 text-blue-400 mb-1" />
+                    <span className="truncate w-full font-semibold font-mono font-bold font-serif">Facebook</span>
+                  </a>
+
+                  <a 
+                    href="https://twitter.com/mugabeprince@1" 
+                    target="_blank" 
+                    rel="noreferrer" 
+                    className="flex flex-col items-center justify-center p-2 rounded-lg bg-slate-900 border border-slate-805 hover:border-cyan-500/30 text-center hover:text-white transition-all text-slate-450"
+                    title="Twitter / X @mugabeprince@1"
+                  >
+                    <Twitter className="w-4 h-4 text-sky-400 mb-1" />
+                    <span className="truncate w-full font-semibold font-mono font-bold">Twitter</span>
+                  </a>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        {/* Legal bar */}
+        <div className="max-w-7xl mx-auto px-4 py-6 flex flex-col md:flex-row items-center justify-between gap-4 text-xs font-sans">
+          <div className="text-slate-500 leading-relaxed text-center md:text-left">
+            <p className="text-slate-400 font-bold flex flex-wrap items-center justify-center md:justify-start gap-2">
               <span>Ikaze Access Empowerment Platform</span>
-              <span className="text-[10px] font-mono bg-cyan-950/80 text-cyan-400 border border-cyan-800/60 px-2 py-0.5 rounded-full uppercase">Developed by MUGABEPRINCE</span>
+              <span className="text-[10px] font-mono bg-cyan-950/80 text-cyan-400 border border-cyan-800/60 px-2.5 py-0.5 rounded-full uppercase">Developed by MUGABEPRINCE</span>
             </p>
             <p className="mt-0.5">Designed first for Rwanda, scaling globally. © 2026. All rights conforming to WCAG 2.2 AA standards.</p>
           </div>
-          <div className="flex flex-wrap gap-4 text-slate-400 font-medium">
-            <button onClick={() => alert("Support: contact@ikazeaccess.rw • Tel: +250 788 000 000")} className="hover:underline flex items-center gap-1">
-              <Phone className="w-3.5 h-3.5" /> Support Hotlines
+          <div className="flex flex-wrap justify-center items-center gap-4 text-slate-400 font-medium">
+            <button 
+              onClick={() => setIsSupportOpen(true)} 
+              className="hover:underline flex items-center gap-1.5 px-3 py-1.5 bg-cyan-950/40 border border-cyan-800/40 hover:border-cyan-500/50 text-cyan-400 rounded-lg text-xs font-bold transition-all cursor-pointer"
+            >
+              <Phone className="w-3.5 h-3.5" /> Support Helpdesk
             </button>
-            <a href="https://www.ncpd.gov.rw" target="_blank" rel="noreferrer" className="hover:underline">
+            <a href="https://www.ncpd.gov.rw" target="_blank" rel="noreferrer" className="hover:underline text-xs">
               NCPD Partner Site
             </a>
-            <span className="text-slate-600">|</span>
-            <span className="text-cyan-400 font-mono text-[10px]">SYSTEM STATUS: ALL NODES LIVE</span>
+            <span className="text-slate-700 hidden sm:inline">|</span>
+            <span className="text-cyan-400 font-mono text-[10px] hidden sm:inline">SYSTEM STATUS: ALL NODES LIVE</span>
           </div>
         </div>
       </footer>
@@ -1487,6 +1629,152 @@ export default function App() {
         isOpen={isAuthOpen}
         onClose={() => setIsAuthOpen(false)}
       />
+
+      {/* Dynamic Support Contact Overlay Modal */}
+      {isSupportOpen && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-entrance font-sans text-left">
+          <div className={`w-full max-w-md rounded-2xl border ${prefContrast === "high-contrast" ? "bg-black border-white border-2 text-white" : "bg-slate-900 border-slate-800 text-slate-100"} p-5 sm:p-6 shadow-2xl space-y-4 relative`}>
+            
+            <button
+              onClick={() => setIsSupportOpen(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-200 p-1.5 rounded-lg border border-transparent hover:border-slate-800 transition-all cursor-pointer"
+              aria-label="Close support dialog"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div>
+              <span className="text-[10px] font-mono uppercase tracking-wider text-cyan-400 font-bold block">Direct Developer Contact Support</span>
+              <h3 className="text-lg font-bold font-sans tracking-tight mt-1 flex items-center gap-2">
+                <HelpCircle className="w-5 h-5 text-cyan-400 animate-pulse" />
+                 facing a Problem? Reach Out Directly
+              </h3>
+              <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                If you experience any accessibility hurdles, bugs, or need assistance, we're ready to help you solve it. Get in touch:
+              </p>
+            </div>
+
+            <div className="space-y-3 pt-1">
+              {/* Phone / Text */}
+              <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-850/50 flex flex-col gap-2.5">
+                <div className="flex items-start gap-3">
+                  <Phone className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+                  <div className="space-y-0.5 w-full">
+                    <span className="text-[10px] uppercase font-mono tracking-wider text-slate-500 block">Call, Text or WhatsApp</span>
+                    <div className="flex items-center justify-between gap-1 bg-slate-900/60 p-1.5 px-2.5 rounded-lg border border-slate-805 mt-1.5">
+                      <a 
+                        href="tel:078422351" 
+                        onClick={() => handleCopy("078422351", "phone")}
+                        className="text-base font-bold text-white hover:text-cyan-400 transition-colors"
+                      >
+                        078422351
+                      </a>
+                      <button
+                        onClick={() => handleCopy("078422351", "phone")}
+                        className="px-2 py-1 rounded bg-slate-950 hover:bg-slate-900 text-[10px] text-cyan-400 hover:text-white border border-slate-805 font-mono transition-all cursor-pointer"
+                      >
+                        {copiedPhone ? "✓ Copied!" : "📋 Copy"}
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-slate-404 leading-snug mt-2">
+                      Send a direct text message if you experience difficulty joining task processes or applying to careers.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Email */}
+              <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-850/50 flex flex-col gap-2.5">
+                <div className="flex items-start gap-3">
+                  <Mail className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
+                  <div className="space-y-0.5 w-full">
+                    <span className="text-[10px] uppercase font-mono tracking-wider text-slate-500 block">Lead Developer Email</span>
+                    <div className="flex items-center justify-between gap-1 bg-slate-900/60 p-1.5 px-2.5 rounded-lg border border-slate-805 mt-1.5">
+                      <a 
+                        href="mailto:mugabeprince1@gmail.com" 
+                        onClick={() => handleCopy("mugabeprince1@gmail.com", "email")}
+                        className="text-xs font-bold text-white hover:text-cyan-400 transition-colors block truncate"
+                      >
+                        mugabeprince1@gmail.com
+                      </a>
+                      <button
+                        onClick={() => handleCopy("mugabeprince1@gmail.com", "email")}
+                        className="px-2 py-1 rounded bg-slate-950 hover:bg-slate-900 text-[10px] text-cyan-400 hover:text-white border border-slate-805 font-mono transition-all cursor-pointer"
+                      >
+                        {copiedEmail ? "✓ Copied!" : "📋 Copy"}
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-slate-404 leading-relaxed mt-2">Response guaranteed in under 12 hours.</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Social Channels */}
+              <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-850/50 space-y-2">
+                <span className="text-[10px] uppercase font-mono tracking-wider text-slate-500 block">Social Direct Messages</span>
+                
+                <div className="grid grid-cols-1 gap-2 text-xs">
+                  {/* Instagram */}
+                  <a
+                    href="https://instagram.com/cacy2_50"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center justify-between p-2 rounded-lg bg-slate-900 border border-slate-800 hover:border-cyan-500/30 text-slate-300 hover:text-white transition-all"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Instagram className="w-4 h-4 text-purple-400 shrink-0" />
+                      <span>Instagram</span>
+                    </span>
+                    <span className="font-mono text-[10.5px] text-slate-400 font-bold">cacy2_50</span>
+                  </a>
+
+                  {/* Facebook */}
+                  <a
+                    href="https://facebook.com/mugabeprince"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center justify-between p-2 rounded-lg bg-slate-900 border border-slate-800 hover:border-cyan-500/30 text-slate-300 hover:text-white transition-all"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Facebook className="w-4 h-4 text-blue-400 shrink-0" />
+                      <span>Facebook</span>
+                    </span>
+                    <span className="font-mono text-[10.5px] text-slate-400 font-bold">mugabeprince</span>
+                  </a>
+
+                  {/* Twitter / X */}
+                  <a
+                    href="https://twitter.com/mugabeprince@1"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center justify-between p-2 rounded-lg bg-slate-900 border border-slate-800 hover:border-cyan-500/30 text-slate-300 hover:text-white transition-all"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Twitter className="w-4 h-4 text-sky-450 shrink-0" />
+                      <span>Twitter / X</span>
+                    </span>
+                    <span className="font-mono text-[10.5px] text-slate-400 font-bold">mugabeprince@1</span>
+                  </a>
+                </div>
+              </div>
+
+              {/* Physical Location */}
+              <div className="text-center font-mono text-[10px] text-slate-500 flex items-center justify-center gap-1.5 pt-1">
+                <MapPin className="w-3.5 h-3.5 text-red-500 shrink-0" />
+                <span>Nyarugenge, Kigali City, Rwanda 🇷🇼</span>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setIsSupportOpen(false)}
+              className="w-full py-2.5 bg-slate-800 hover:bg-slate-705 border border-slate-700/60 text-slate-100 font-bold text-xs rounded-xl transition-all cursor-pointer"
+            >
+              Got it, thanks!
+            </button>
+
+          </div>
+        </div>
+      )}
     </div>
   );
 }
