@@ -102,6 +102,20 @@ export default function App() {
   const [cart, setCart] = useState<{ item: AssistiveDevice; quantity: number; isRental: boolean }[]>([]);
   const [isCheckoutSuccess, setIsCheckoutSuccess] = useState(false);
 
+  // Mobile Money Payments States (MTN / Airtel)
+  const [isPaymentOpen, setIsPaymentOpen] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState<number>(0);
+  const [paymentProvider, setPaymentProvider] = useState<"MTN" | "Airtel">("MTN");
+  const [paymentPhone, setPaymentPhone] = useState<string>("");
+  const [paymentAccountName, setPaymentAccountName] = useState<string>("");
+  const [paymentTarget, setPaymentTarget] = useState<{ type: "course" | "marketplace"; id: string; name: string } | null>(null);
+  const [paymentProcessing, setPaymentProcessing] = useState(false);
+  const [paymentSuccess, setPaymentSuccess] = useState(false);
+  const [paymentErrorMessage, setPaymentErrorMessage] = useState<string | null>(null);
+  const [simulatedSMS, setSimulatedSMS] = useState<{ sender: string; text: string; time: string; open: boolean } | null>(null);
+  const [paymentProgress, setPaymentProgress] = useState<number>(0);
+  const [paymentStep, setPaymentStep] = useState<string>("");
+
   // Sync session with simple form settings
   React.useEffect(() => {
     if (currentSession) {
@@ -191,11 +205,231 @@ export default function App() {
   };
 
   const executeCheckout = () => {
-    setIsCheckoutSuccess(true);
-    setTimeout(() => {
-      setCart([]);
-      setIsCheckoutSuccess(false);
-    }, 4500);
+    const total = calculateTotal();
+    setPaymentAmount(total);
+    setPaymentTarget({ type: "marketplace", id: "cart", name: "Assistive Devices Order" });
+    if (currentSession && currentSession.savedMomoNumber) {
+      setPaymentProvider((currentSession.savedMomoProvider as any) || "MTN");
+      setPaymentPhone(currentSession.savedMomoNumber);
+      setPaymentAccountName(currentSession.savedMomoName || "");
+    } else {
+      setPaymentProvider("MTN");
+      setPaymentPhone("");
+      setPaymentAccountName("");
+    }
+    setIsPaymentOpen(true);
+    setPaymentSuccess(false);
+    setPaymentErrorMessage(null);
+  };
+
+  const handleEnrollCourse = (course: Course) => {
+    if (currentSession && currentSession.enrolledCourses.includes(course.id)) {
+      alert(`You are already enrolled in "${course.title}".`);
+      return;
+    }
+
+    if (course.price && course.price > 0) {
+      setPaymentAmount(course.price);
+      setPaymentTarget({ type: "course", id: course.id, name: course.title });
+      if (currentSession && currentSession.savedMomoNumber) {
+        setPaymentProvider((currentSession.savedMomoProvider as any) || "MTN");
+        setPaymentPhone(currentSession.savedMomoNumber);
+        setPaymentAccountName(currentSession.savedMomoName || "");
+      } else {
+        setPaymentProvider("MTN");
+        setPaymentPhone("");
+        setPaymentAccountName("");
+      }
+      setIsPaymentOpen(true);
+      setPaymentSuccess(false);
+      setPaymentErrorMessage(null);
+    } else {
+      if (currentSession) {
+        const updated: UserAccount = {
+          ...currentSession,
+          enrolledCourses: [...currentSession.enrolledCourses, course.id],
+          xpPoints: currentSession.xpPoints + 100
+        };
+        handleUpdateProfile(updated);
+        alert(`Congratulations! You have successfully enrolled in "${course.title}". +100 XP Awarded! You can now access your lessons.`);
+      } else {
+        alert(`You have successfully enrolled in the FREE course "${course.title}". Log in or create an account to track your progress!`);
+      }
+    }
+  };
+
+  const finalizeMoMoPaymentSuccess = (phoneClean: string) => {
+    setPaymentProcessing(false);
+    setPaymentSuccess(true);
+
+    const actualAmount = paymentAmount.toLocaleString();
+    const txtNo = Math.floor(1000000000 + Math.random() * 9000000000).toString();
+    const refName = paymentTarget ? paymentTarget.name.substring(0, 15).toUpperCase().replace(/\s+/g, "-") : "SERVICE";
+    const balance = Math.floor(5500 + Math.random() * 75000).toLocaleString();
+    const fee = paymentProvider === "MTN" ? "150" : "0";
+    
+    const smsText = paymentProvider === "MTN"
+      ? `Y'ello! Mukiriya ${paymentAccountName || phoneClean}, Kwishyura IKAZE ACCESS amafaranga ${actualAmount} RWF kuri reference ${refName} byagenze neza. Transaction ID: ${txtNo}. Ikiguzi ni ${fee} RWF. Balance nshya kuri konti ya MoMo ni ${balance} RWF. Murakoze gukoresha MTN MoMo!`
+      : `Airtel Money Info: Transaction Approved! You have paid RWF ${actualAmount} to IKAZE ACCESS (${refName}). Fee: ${fee} RWF. Transaction ID: AM${txtNo}. New Wallet Balance: RWF ${balance}. Keep your wallet PIN secure.`;
+
+    setSimulatedSMS({
+      sender: paymentProvider === "MTN" ? "MTN MoMo" : "AirtelMoney",
+      text: smsText,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      open: true
+    });
+
+    if (paymentTarget) {
+      if (paymentTarget.type === "course") {
+        if (currentSession) {
+          const updated: UserAccount = {
+            ...currentSession,
+            enrolledCourses: [...currentSession.enrolledCourses, paymentTarget.id],
+            xpPoints: currentSession.xpPoints + 250
+          };
+          handleUpdateProfile(updated);
+        } else {
+          alert(`Payment of ${paymentAmount} RWF received. You have successfully enrolled in premium course: "${paymentTarget.name}".`);
+        }
+      } else if (paymentTarget.type === "marketplace") {
+        setCart([]);
+        setIsCheckoutSuccess(true);
+        setTimeout(() => {
+          setIsCheckoutSuccess(false);
+        }, 6000);
+      }
+    }
+  };
+
+  const confirmMobileMoneyPayment = async () => {
+    if (!paymentPhone.trim()) {
+      setPaymentErrorMessage("Please enter your mobile phone number.");
+      return;
+    }
+    const phoneClean = paymentPhone.replace(/\s+/g, "");
+    if (phoneClean.length < 8) {
+      setPaymentErrorMessage("Please enter a valid active phone number.");
+      return;
+    }
+
+    setPaymentProcessing(true);
+    setPaymentProgress(0);
+    setPaymentStep("Connecting with telecom secure gateway...");
+    setPaymentErrorMessage(null);
+
+    try {
+      const response = await fetch("/api/momo/pay", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phone: phoneClean,
+          amount: paymentAmount,
+          provider: paymentProvider,
+          name: paymentAccountName || "",
+          targetType: paymentTarget ? paymentTarget.type : "service",
+          targetId: paymentTarget ? paymentTarget.id : "momo"
+        })
+      });
+
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || "Telecom gateway failed to respond to initiate request.");
+      }
+
+      const result = await response.json();
+      const { ref, isSimulated } = result;
+
+      if (isSimulated) {
+        console.log("[PAYMENT] Operating in Sandbox - launching high-fidelity simulation sequence.");
+        const totalDuration = 6000; // 6 seconds
+        const stepInterval = 100;
+        let elapsed = 0;
+
+        const paymentTimer = setInterval(() => {
+          elapsed += stepInterval;
+          const progressPercent = Math.min(Math.floor((elapsed / totalDuration) * 100), 100);
+          setPaymentProgress(progressPercent);
+
+          if (progressPercent < 20) {
+            setPaymentStep("Authenticating subscriber registration & checking network status...");
+          } else if (progressPercent < 45) {
+            setPaymentStep(`Initiating automated USSD Instant Push Notification to ${phoneClean}...`);
+          } else if (progressPercent < 75) {
+            setPaymentStep("Awaiting subscriber secure PIN keypad confirmation on mobile device...");
+          } else if (progressPercent < 90) {
+            setPaymentStep("Success packet received! Auditing payment receipt cryptographic signatures...");
+          } else {
+            setPaymentStep("Synchronizing premium course licenses with database registry...");
+          }
+
+          if (elapsed >= totalDuration) {
+            clearInterval(paymentTimer);
+            finalizeMoMoPaymentSuccess(phoneClean);
+          }
+        }, stepInterval);
+
+      } else {
+        // REAL PAYMENT: Let's do active polling on the network
+        console.log(`[PAYMENT] Real Mobile Money payment initiated on telecom gateway. Ref: ${ref}`);
+        setPaymentStep(`Real USSD secure PIN request initiated to ${phoneClean}. Please enter your MoMo PIN on your phone immediately!`);
+        setPaymentProgress(25);
+
+        let pollCount = 0;
+        const maxPolls = 35; // check 35 times (70 seconds)
+        let simulatedProgress = 25;
+
+        const pollTimer = setInterval(async () => {
+          pollCount++;
+          
+          // Increment progress marginally to show activity
+          simulatedProgress = Math.min(simulatedProgress + Math.floor(Math.random() * 4) + 1, 92);
+          setPaymentProgress(simulatedProgress);
+
+          if (pollCount % 2 === 0) {
+            setPaymentStep(`Awaiting phone PIN validation. Please make sure ${phoneClean} is unlocked & active...`);
+          } else {
+            setPaymentStep("Checking telecom network payment fulfillment state...");
+          }
+
+          try {
+            const statusRes = await fetch(`/api/momo/status/${ref}`);
+            if (statusRes.ok) {
+              const statusData = await statusRes.json();
+              const { status } = statusData;
+
+              console.log(`[PAYMENT POLL] Reference ${ref} state: ${status}`);
+
+              if (status === "successful") {
+                clearInterval(pollTimer);
+                setPaymentProgress(100);
+                setPaymentStep("Payment confirmed by network! Finalizing enrollment registrations...");
+                
+                setTimeout(() => {
+                  finalizeMoMoPaymentSuccess(phoneClean);
+                }, 800);
+              } else if (status === "failed") {
+                clearInterval(pollTimer);
+                setPaymentProcessing(false);
+                setPaymentErrorMessage("Payment request failed or was cancelled by user Pin rejection.");
+              }
+            }
+          } catch (pollErr) {
+            console.warn("Error polling transaction status:", pollErr);
+          }
+
+          if (pollCount >= maxPolls) {
+            clearInterval(pollTimer);
+            setPaymentProcessing(false);
+            setPaymentErrorMessage("Gateway confirmation timeout. Please verify your mobile wallet status or check account history.");
+          }
+        }, 2000); // Poll every 2 seconds
+      }
+
+    } catch (err: any) {
+      console.error("[PAYMENT ERROR]", err);
+      setPaymentProcessing(false);
+      setPaymentErrorMessage(err.message || "Failed to initiate Mobile Money payment connection.");
+    }
   };
 
   // Job Submission Handler
@@ -1157,14 +1391,30 @@ export default function App() {
                       </div>
                     </div>
 
-                    <div className="pt-4 border-t border-slate-850 flex items-center justify-between text-xs text-slate-400">
-                      <span>Lectures: {course.lectures} ({course.duration})</span>
-                      <button
-                        onClick={() => alert(`Simulated: Joined course "${course.title}". Check your learner dashboard. Enjoy!`)}
-                        className="p-1 px-4 bg-slate-850 hover:bg-slate-800 text-cyan-400 border border-slate-805 font-bold rounded cursor-pointer transition-colors"
-                      >
-                        Enroll Now
-                      </button>
+                     <div className="pt-4 border-t border-slate-850 flex items-center justify-between text-xs text-slate-400">
+                      <div className="flex flex-col">
+                        <span>Lectures: {course.lectures} ({course.duration})</span>
+                        <span className="text-[10px] font-mono font-bold text-slate-500 mt-0.5">
+                          Cost: {course.price && course.price > 0 ? `${course.price.toLocaleString()} RWF` : "FREE (Inclusive Access)"}
+                        </span>
+                      </div>
+                      
+                      {currentSession && currentSession.enrolledCourses.includes(course.id) ? (
+                        <span className="px-3.5 py-1.5 bg-emerald-950/40 text-emerald-450 border border-emerald-900 font-bold rounded flex items-center gap-1">
+                          Enrolled ✓
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => handleEnrollCourse(course)}
+                          className={`p-1.5 px-4 rounded font-bold cursor-pointer transition-colors border ${
+                            course.price && course.price > 0
+                              ? "bg-cyan-950 hover:bg-cyan-900 text-cyan-400 border-cyan-800"
+                              : "bg-slate-850 hover:bg-slate-800 text-slate-300 border-slate-800"
+                          }`}
+                        >
+                          {course.price && course.price > 0 ? "Pay & Study" : "Study Free"}
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -1772,6 +2022,306 @@ export default function App() {
               Got it, thanks!
             </button>
 
+          </div>
+        </div>
+      )}
+
+      {/* Mobile Money (MTN / Airtel Money) Payment Modal */}
+      {isPaymentOpen && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-entrance font-sans text-left">
+          <div className={`w-full max-w-md rounded-2xl border ${prefContrast === "high-contrast" ? "bg-black border-white border-2 text-white" : "bg-slate-900 border-slate-800 text-slate-100"} p-5 sm:p-6 shadow-2xl space-y-5 relative`}>
+            
+            <button
+              onClick={() => { if (!paymentProcessing) setIsPaymentOpen(false); }}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-200 p-1.5 rounded-lg border border-transparent hover:border-slate-800 transition-all cursor-pointer"
+              disabled={paymentProcessing}
+              aria-label="Close payment dialog"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div>
+              <span className="text-[10px] font-mono uppercase tracking-wider text-cyan-400 font-bold block">
+                IKaze Secure Mobile Money API
+              </span>
+              <h3 className="text-lg font-bold font-sans tracking-tight mt-1 flex items-center gap-2">
+                <Coins className="w-5 h-5 text-cyan-400 animate-pulse" />
+                {paymentSuccess ? "Payment Completed" : `Pay for ${paymentTarget?.name || "Service"}`}
+              </h3>
+              <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                {paymentSuccess 
+                  ? "Thank you! Transaction processed and verified successfully." 
+                  : "Complete your transaction securely. This system integrates directly with authorized mobile money gateways."}
+              </p>
+            </div>
+
+            {paymentErrorMessage && (
+              <div className="p-3 bg-red-950/40 border border-red-900 text-red-400 text-xs rounded-lg font-medium">
+                {paymentErrorMessage}
+              </div>
+            )}
+
+            {paymentSuccess ? (
+              <div className="space-y-4 pt-1 text-center">
+                <div className="mx-auto w-12 h-12 bg-emerald-950 text-emerald-450 rounded-full border border-emerald-800 flex items-center justify-center">
+                  <span className="text-xl font-bold">✓</span>
+                </div>
+                <div>
+                  <h4 className="font-bold text-sm text-white">RWF {paymentAmount.toLocaleString()} Paid Successfully</h4>
+                  <p className="text-xs text-slate-400 mt-0.5 font-mono">Operator ID: {paymentProvider} MOBILE MONEY</p>
+                </div>
+
+                {simulatedSMS && (
+                  <div className="text-left bg-black rounded-xl border border-slate-800 p-4 font-mono space-y-2.5 shadow-inner">
+                    <div className="flex justify-between items-center text-[10px] text-slate-500 border-b border-slate-850 pb-1.5 matches-pattern">
+                      <span className="flex items-center gap-1.5">
+                        <span className={`w-2 h-2 rounded-full ${paymentProvider === "MTN" ? "bg-amber-400" : "bg-red-500 animate-pulse"}`}></span>
+                        📱 OFFICIAL TRANSACTION MESSAGE
+                      </span>
+                      <span>{simulatedSMS.time}</span>
+                    </div>
+                    <p className={`text-[11px] leading-relaxed select-all cursor-copy ${paymentProvider === "MTN" ? "text-amber-400" : "text-red-400 font-bold"}`}>
+                      {simulatedSMS.text}
+                    </p>
+                    <span className="text-[9px] text-slate-550 italic block text-center pt-1 border-t border-slate-850">
+                      💡 Note: In production, the MoMo API invokes a real USSD push & carrier-grade SMS to the subscriber's phone number {paymentPhone}.
+                    </span>
+                  </div>
+                )}
+
+                <p className="text-xs text-slate-300 bg-slate-950/40 p-3 rounded-lg border border-slate-850">
+                  {paymentTarget?.type === "course" 
+                    ? "You have been enrolled in the class. Go to the Educational Curriculum tab to start learning. You have also been awarded +250 XP Points!" 
+                    : "Your order is completed! Our delivery unit will coordinate shipping details via SMS/text message to your mobile line."}
+                </p>
+                <button
+                  onClick={() => setIsPaymentOpen(false)}
+                  className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-555 text-white font-bold text-xs rounded-xl transition-all cursor-pointer"
+                >
+                  Return to Platform
+                </button>
+              </div>
+            ) : paymentProcessing ? (
+              <div className="space-y-5 py-4 text-center">
+                <div className="relative mx-auto w-20 h-20 flex items-center justify-center">
+                  <svg className="absolute w-full h-full transform -rotate-90">
+                    <circle
+                      cx="40"
+                      cy="40"
+                      r="34"
+                      stroke="#1e293b"
+                      strokeWidth="4"
+                      fill="transparent"
+                    />
+                    <circle
+                      cx="40"
+                      cy="40"
+                      r="34"
+                      stroke="#06b6d4"
+                      strokeWidth="4"
+                      fill="transparent"
+                      strokeDasharray={`${2 * Math.PI * 34}`}
+                      strokeDashoffset={`${2 * Math.PI * 34 * (1 - paymentProgress / 100)}`}
+                      className="transition-all duration-150 ease-out"
+                    />
+                  </svg>
+                  <span className="text-sm font-mono font-black text-cyan-400">{paymentProgress}%</span>
+                </div>
+
+                <div className="space-y-1.5">
+                  <h4 className="text-xs font-bold text-white uppercase tracking-wider font-mono flex items-center justify-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping"></span>
+                    Verifying Gateway State
+                  </h4>
+                  <p className="text-xs text-slate-300 font-sans leading-relaxed max-w-xs mx-auto min-h-[36px]">
+                    {paymentStep}
+                  </p>
+                </div>
+
+                {/* Simulated linear progress bar */}
+                <div className="w-full bg-slate-950 h-2 rounded-full overflow-hidden border border-slate-850">
+                  <div 
+                    className="bg-gradient-to-r from-cyan-500 via-teal-500 to-emerald-500 h-full rounded-full transition-all duration-150"
+                    style={{ width: `${paymentProgress}%` }}
+                  />
+                </div>
+
+                {/* Adaptive checklist of active gateways showing success of steps */}
+                <div className="bg-slate-950/40 border border-slate-850 p-3.5 rounded-xl text-left text-xs space-y-2.5 font-mono">
+                  <div className="flex items-center gap-2">
+                    <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[8.5px] font-bold ${paymentProgress >= 20 ? 'bg-emerald-950 text-emerald-450 border border-emerald-800' : 'bg-slate-900 text-slate-500 border border-slate-800'}`}>
+                      {paymentProgress >= 20 ? "✓" : "1"}
+                    </span>
+                    <span className={paymentProgress >= 20 ? "text-slate-200 font-bold" : "text-slate-500"}>Secure Gate handshake with telecom</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[8.5px] font-bold ${paymentProgress >= 45 ? 'bg-emerald-950 text-emerald-450 border border-emerald-800' : 'bg-slate-900 text-slate-500 border border-slate-800'}`}>
+                      {paymentProgress >= 45 ? "✓" : "2"}
+                    </span>
+                    <span className={paymentProgress >= 45 ? "text-slate-200 font-bold" : "text-slate-500"}>USSD Secure Instant Push Delivery</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[8.5px] font-bold ${paymentProgress >= 75 ? 'bg-emerald-950 text-emerald-450 border border-emerald-800' : 'bg-slate-900 text-slate-500 border border-slate-800'}`}>
+                      {paymentProgress >= 75 ? "✓" : "3"}
+                    </span>
+                    <span className={paymentProgress >= 75 ? "text-slate-200 font-bold" : "text-slate-500"}>Subscriber PIN verification check</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[8.5px] font-bold ${paymentProgress >= 90 ? 'bg-emerald-950 text-emerald-450 border border-emerald-800' : 'bg-slate-900 text-slate-500 border border-slate-800'}`}>
+                      {paymentProgress >= 90 ? "✓" : "4"}
+                    </span>
+                    <span className={paymentProgress >= 90 ? "text-slate-200 font-bold" : "text-slate-500"}>Access registry license synch</span>
+                  </div>
+                </div>
+
+                <p className="text-[10px] text-slate-550 font-sans italic">
+                  Keep your mobile device unlocked. Do not refresh or exit the verification menu.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4 pt-1">
+                {/* Gateway Integration Banner */}
+                <div className="p-3 rounded-xl border text-[11px] leading-relaxed flex items-start gap-2 bg-slate-950/70 border-cyan-800/40 text-slate-300">
+                  <span className="text-cyan-400 font-bold font-mono text-xs mt-0.5">⚡</span>
+                  <div>
+                    <span className="font-bold text-white block">Rwanda Paypack API Gateway Connected</span>
+                    To trigger an <span className="text-amber-400 font-bold font-mono">actual USSD PIN challenge</span> on your phone (078... / 072...), configure your <span className="text-cyan-400 font-mono">PAYPACK_CLIENT_ID</span> and <span className="text-cyan-400 font-mono">PAYPACK_CLIENT_SECRET</span> in Settings &rarr; Secrets. Otherwise, Sandbox simulation runs automatically!
+                  </div>
+                </div>
+
+                {/* Provider Selection */}
+                <div className="space-y-2">
+                  <span className="text-[10px] uppercase font-mono tracking-wider text-slate-500 block">Select Operator</span>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setPaymentProvider("MTN")}
+                      className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                        paymentProvider === "MTN"
+                          ? "bg-amber-950/30 border-amber-500/80 text-amber-400 font-bold"
+                          : "bg-slate-950/50 border-slate-850 hover:border-slate-800 text-slate-400"
+                      }`}
+                      disabled={paymentProcessing}
+                    >
+                      <span className="w-8 h-8 rounded-full bg-amber-400 flex items-center justify-center text-black font-extrabold text-xs">MTN</span>
+                      <span className="text-xs">MTN MoMo Pay</span>
+                    </button>
+                    
+                    <button
+                      type="button"
+                      onClick={() => setPaymentProvider("Airtel")}
+                      className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                        paymentProvider === "Airtel"
+                          ? "bg-red-950/30 border-red-500/80 text-red-00 font-bold"
+                          : "bg-slate-950/50 border-slate-850 hover:border-slate-800 text-slate-400"
+                      }`}
+                      disabled={paymentProcessing}
+                    >
+                      <span className="w-8 h-8 rounded-full bg-red-600 flex items-center justify-center text-white font-extrabold text-[10px]">Airtel</span>
+                      <span className="text-xs">Airtel Money</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Amount overview */}
+                <div className="p-3 bg-slate-950/60 border border-slate-850 rounded-xl flex justify-between items-center text-xs">
+                  <span className="text-slate-400">Total payable:</span>
+                  <span className="font-bold font-mono text-cyan-400 text-sm">{paymentAmount.toLocaleString()} RWF</span>
+                </div>
+
+                {/* Number input and account name */}
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    {currentSession && currentSession.savedMomoNumber ? (
+                      <div className="flex items-center justify-between">
+                        <label htmlFor="payment-phone" className="text-[10px] uppercase font-mono tracking-wider text-slate-500 block">Mobile Phone Number</label>
+                        {paymentPhone === currentSession.savedMomoNumber ? (
+                          <span className="text-[9px] text-emerald-450 font-bold bg-emerald-950/40 border border-emerald-900/40 px-2 py-0.5 rounded flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+                            ✓ Loaded Saved MoMo
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPaymentPhone(currentSession.savedMomoNumber || "");
+                              setPaymentProvider((currentSession.savedMomoProvider as any) || "MTN");
+                              setPaymentAccountName(currentSession.savedMomoName || "");
+                            }}
+                            className="text-[9px] text-cyan-400 font-mono font-bold hover:underline cursor-pointer bg-cyan-950/40 border border-cyan-800/40 px-1.5 py-0.5 rounded-lg text-left"
+                          >
+                            ⚡ Autofill Saved: {currentSession.savedMomoNumber}
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <label htmlFor="payment-phone" className="text-[10px] uppercase font-mono tracking-wider text-slate-500 block">Mobile Phone Number</label>
+                    )}
+                    <input
+                      id="payment-phone"
+                      type="tel"
+                      value={paymentPhone}
+                      onChange={(e) => setPaymentPhone(e.target.value)}
+                      placeholder="e.g., 078XXXXXXX or 072XXXXXXX"
+                      className="w-full bg-slate-950/60 border border-slate-805 p-2 rounded-lg text-xs font-mono text-white focus:outline-none focus:border-cyan-500"
+                      disabled={paymentProcessing}
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label htmlFor="payment-name" className="text-[10px] uppercase font-mono tracking-wider text-slate-500 block">Subscriber Name (Optional)</label>
+                    <input
+                      id="payment-name"
+                      type="text"
+                      value={paymentAccountName}
+                      onChange={(e) => setPaymentAccountName(e.target.value)}
+                      placeholder="e.g., Jean d'Amour"
+                      className="w-full bg-slate-950/60 border border-slate-805 p-2 rounded-lg text-xs text-white focus:outline-none focus:border-cyan-500"
+                      disabled={paymentProcessing}
+                    />
+                  </div>
+                </div>
+
+                {/* Submit trigger */}
+                <button
+                  onClick={confirmMobileMoneyPayment}
+                  className="w-full py-2.5 bg-gradient-to-r from-cyan-600 to-teal-600 hover:from-cyan-555 hover:to-teal-555 text-white font-bold text-xs rounded-xl shadow cursor-pointer transition-all"
+                >
+                  Authorize RWF {paymentAmount.toLocaleString()} via {paymentProvider}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      {/* Floating Simulated Phone SMS Push Toast Notification */}
+      {simulatedSMS && simulatedSMS.open && (
+        <div className="fixed bottom-6 right-6 max-w-sm w-full bg-slate-950/95 border border-slate-800 p-4 rounded-xl shadow-2xl z-50 animate-entrance text-xs transition-all flex flex-col space-y-2 text-slate-100 font-sans backdrop-blur-md">
+          <div className="flex items-center justify-between border-b border-slate-850 pb-2">
+            <div className="flex items-center gap-2">
+              <span className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-[9px] ${
+                simulatedSMS.sender === "MTN MoMo" ? "bg-amber-400 text-black" : "bg-red-650 text-white"
+              }`}>
+                {simulatedSMS.sender === "MTN MoMo" ? "MTN" : "Airtel"}
+              </span>
+              <div className="text-[10px] font-bold font-mono text-white">
+                💬 {simulatedSMS.sender} (INCOMING MESSAGE)
+              </div>
+            </div>
+            <button
+              onClick={() => setSimulatedSMS(prev => prev ? { ...prev, open: false } : null)}
+              className="text-slate-400 hover:text-white p-0.5 rounded transition-all cursor-pointer"
+              aria-label="Dismiss simulated message notification"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <div className="bg-black/60 p-2.5 rounded-lg border border-slate-900 text-slate-300 font-mono text-[11px] leading-relaxed break-words select-all">
+            {simulatedSMS.text}
+          </div>
+          <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono">
+            <span>Received: {simulatedSMS.time}</span>
+            <span className="text-cyan-400 font-bold">Simulated Offline</span>
           </div>
         </div>
       )}

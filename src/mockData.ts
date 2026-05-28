@@ -105,7 +105,8 @@ export const MOCK_COURSES: Course[] = [
       "Semantic HTML & WAI-ARIA attribute mappings",
       "Color Contrast & Fluid Focus Indicators",
       "How to write professional accessibility audit reports clients pay for"
-    ]
+    ],
+    price: 15000
   },
   {
     id: "course-2",
@@ -123,7 +124,8 @@ export const MOCK_COURSES: Course[] = [
       "Formulating specific, disability-adaptive prompts for cognitive task acceleration",
       "Drafting business correspondence & freelance agreements with AI",
       "Creating summaries of complex government policies and project specifications"
-    ]
+    ],
+    price: 8000
   },
   {
     id: "course-3",
@@ -141,7 +143,8 @@ export const MOCK_COURSES: Course[] = [
       "Writing winning freelance gig templates",
       "Using local mobile money systems for global currency payouts",
       "Handling client communication confidently"
-    ]
+    ],
+    price: 0
   },
   {
     id: "course-4",
@@ -159,7 +162,8 @@ export const MOCK_COURSES: Course[] = [
       "Composing clear email proposals and attaching files",
       "Online security, dark web scams, and safe data habits",
       "Collaborating on cloud documents"
-    ]
+    ],
+    price: 0
   }
 ];
 

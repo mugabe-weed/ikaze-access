@@ -36,6 +36,221 @@ function getGeminiClient(): GoogleGenAI {
 }
 
 // REST APIs
+// Helper for cleaning phone numbers for Rwanda Paypack Gateway format
+function cleanPhoneNumberForPaypack(phone: string): string {
+  let cleaned = phone.replace(/[\s+()-]/g, "");
+  if (cleaned.startsWith("250")) {
+    cleaned = "0" + cleaned.substring(3);
+  }
+  return cleaned;
+}
+
+// Paypack Rwanda Mobile Money payment (MTN MoMo & Airtel Money direct USSD push)
+app.post("/api/momo/pay", async (req, res) => {
+  try {
+    const { phone, amount, provider, name, targetType, targetId } = req.body;
+    if (!phone) {
+      return res.status(400).json({ error: "Phone number is required." });
+    }
+    if (!amount || Number(amount) <= 0) {
+      return res.status(400).json({ error: "A valid positive payment amount is required." });
+    }
+
+    const paypackClientId = process.env.PAYPACK_CLIENT_ID;
+    const paypackClientSecret = process.env.PAYPACK_CLIENT_SECRET;
+
+    const cleanedPhone = cleanPhoneNumberForPaypack(phone);
+
+    // If API credentials are not set, return simulated high-fidelity response.
+    if (!paypackClientId || !paypackClientSecret) {
+      console.log(`[PAYPACK SYSTEM] No config keys. Returning beautiful simulation flow for ${cleanedPhone} (${provider}).`);
+      return res.json({
+        isSimulated: true,
+        ref: `MOCK-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`,
+        status: "pending",
+        amount: Number(amount),
+        phone: cleanedPhone,
+        provider: provider || "MTN",
+        warning: "Paypack mobile money authentication keys not defined. Operating securely in simulated Sandbox mode with instant mock confirmations."
+      });
+    }
+
+    console.log(`[PAYPACK SYSTEM] Initiating REAL payment of ${amount} RWF to ${cleanedPhone} using Paypack credentials.`);
+
+    // 1. Authenticate with Paypack
+    const authHeaders = { "Content-Type": "application/json" };
+    const authResponse = await fetch("https://opay-api.paypack.rw/v1/auth/sign-in", {
+      method: "POST",
+      headers: authHeaders,
+      body: JSON.stringify({
+        client_id: paypackClientId,
+        client_secret: paypackClientSecret
+      })
+    });
+
+    if (!authResponse.ok) {
+      const errTxt = await authResponse.text();
+      console.error("[PAYPACK SYSTEM] Authentication connection failed:", errTxt);
+      return res.status(502).json({
+        error: "Telecom Gateway Authenticate handshake failed. Please verify your PAYPACK_CLIENT_ID and PAYPACK_CLIENT_SECRET keys.",
+        details: errTxt
+      });
+    }
+
+    const authData: any = await authResponse.json();
+    const token = authData.access || authData.access_token || authData.token;
+
+    if (!token) {
+      return res.status(502).json({ error: "Failed to extract access signature from Paypack." });
+    }
+
+    // 2. Trigger Cash-in request
+    const cashinHeaders = {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${token}`
+    };
+
+    const cashinPayload = {
+      amount: Number(amount),
+      number: cleanedPhone
+    };
+
+    console.log("[PAYPACK SYSTEM] Sending real Cashin payload:", cashinPayload);
+    const cashinResponse = await fetch("https://opay-api.paypack.rw/v1/payment/cashin", {
+      method: "POST",
+      headers: cashinHeaders,
+      body: JSON.stringify(cashinPayload)
+    });
+
+    if (!cashinResponse.ok) {
+      const errTxt = await cashinResponse.text();
+      console.error("[PAYPACK SYSTEM] Cashin trigger failed:", errTxt);
+      return res.status(502).json({
+        error: "Telecom gateway rejected checkout request. Verify subscriber status and balance amount.",
+        details: errTxt
+      });
+    }
+
+    const cashinData: any = await cashinResponse.json();
+    console.log("[PAYPACK SYSTEM] Cash-in started successfully:", cashinData);
+
+    return res.json({
+      isSimulated: false,
+      ref: cashinData.ref || cashinData.id || cashinData.transaction_id || `PAYPACK-${Date.now()}`,
+      status: cashinData.status || "pending",
+      amount: Number(amount),
+      phone: cleanedPhone,
+      provider: provider || "MTN"
+    });
+
+  } catch (error: any) {
+    console.error("[PAYPACK ERROR] Trigger payment caught:", error);
+    res.status(500).json({ error: error.message || "Internal server error connecting to telecom gateway." });
+  }
+});
+
+// Check real Paypack transaction status
+app.get("/api/momo/status/:ref", async (req, res) => {
+  try {
+    const { ref } = req.params;
+    if (!ref) {
+      return res.status(400).json({ error: "Transaction reference is required." });
+    }
+
+    // Handle mock transactions instantly
+    if (ref.startsWith("MOCK-")) {
+      return res.json({
+        ref: ref,
+        status: "successful",
+        isSimulated: true
+      });
+    }
+
+    const paypackClientId = process.env.PAYPACK_CLIENT_ID;
+    const paypackClientSecret = process.env.PAYPACK_CLIENT_SECRET;
+
+    if (!paypackClientId || !paypackClientSecret) {
+      return res.json({
+        ref: ref,
+        status: "successful",
+        isSimulated: true
+      });
+    }
+
+    // 1. Authenticate to get a fresh token
+    const authResponse = await fetch("https://opay-api.paypack.rw/v1/auth/sign-in", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        client_id: paypackClientId,
+        client_secret: paypackClientSecret
+      })
+    });
+
+    if (!authResponse.ok) {
+      return res.status(502).json({ error: "Failed to authenticate tracking gateway session." });
+    }
+
+    const authData: any = await authResponse.json();
+    const token = authData.access || authData.access_token || authData.token;
+
+    // 2. Query status from Paypack
+    const statusUrl = `https://opay-api.paypack.rw/v1/payment/transactions/${ref}`;
+    console.log(`[PAYPACK SYSTEM] Querying real status for reference: ${ref} at ${statusUrl}`);
+
+    const statusResponse = await fetch(statusUrl, {
+      method: "GET",
+      headers: {
+        "Authorization": `Bearer ${token}`
+      }
+    });
+
+    let txStatus = "pending";
+    let rawData: any = null;
+
+    if (statusResponse.ok) {
+      rawData = await statusResponse.json();
+      txStatus = rawData.status || "pending";
+    } else {
+      // Fallback: try checking inside transaction events `/events/transactions?ref=`
+      const altUrl = `https://opay-api.paypack.rw/v1/events/transactions?ref=${ref}`;
+      const altResponse = await fetch(altUrl, {
+        method: "GET",
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      if (altResponse.ok) {
+        const altData: any = await altResponse.json();
+        rawData = altData.transactions?.[0] || altData.events?.[0] || altData;
+        txStatus = rawData?.status || "pending";
+      } else {
+        console.error(`[PAYPACK SYSTEM] Could not locate transaction: ${ref}`);
+        return res.status(404).json({ error: "Transaction reference not found on network." });
+      }
+    }
+
+    // Standardize Paypack statuses to "successful", "failed", "pending"
+    let unifiedStatus = "pending";
+    if (txStatus === "successful" || txStatus === "completed" || txStatus === "success") {
+      unifiedStatus = "successful";
+    } else if (txStatus === "failed" || txStatus === "cancelled" || txStatus === "refused" || txStatus === "error") {
+      unifiedStatus = "failed";
+    }
+
+    return res.json({
+      ref: ref,
+      status: unifiedStatus,
+      isSimulated: false,
+      rawStatus: txStatus,
+      raw: rawData
+    });
+
+  } catch (error: any) {
+    console.error("[PAYPACK ERROR] check status caught:", error);
+    res.status(500).json({ error: error.message || "Failed to audit remote transaction status." });
+  }
+});
+
+// REST APIs
 // 1. General AI assistant tailored to user's accessibility needs
 app.post("/api/gemini/assistant", async (req, res) => {
   try {

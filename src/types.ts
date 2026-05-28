@@ -37,6 +37,7 @@ export interface Course {
   duration: string;
   description: string;
   syllabus: string[];
+  price?: number; // Price in RWF, undefined or 0 represents free
 }
 
 export interface AssistiveDevice {
@@ -118,5 +119,8 @@ export interface UserAccount {
   enrolledCourses: string[]; // Course IDs
   appliedJobs: string[]; // Job IDs
   completedQuizzes: { quizId: string; score: number }[];
+  savedMomoNumber?: string;
+  savedMomoProvider?: "MTN" | "Airtel";
+  savedMomoName?: string;
 }
 

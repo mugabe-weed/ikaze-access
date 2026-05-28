@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { User, LogIn, LogOut, UserPlus, Key, Eye, EyeOff, Shield, Star, Award, Briefcase, BookOpen, UserCheck, X, Settings } from "lucide-react";
+import { User, LogIn, LogOut, UserPlus, Key, Eye, EyeOff, Shield, Star, Award, Briefcase, BookOpen, UserCheck, X, Settings, CreditCard, Check, Trash2, Plus } from "lucide-react";
 import { UserAccount } from "../types";
 import { MOCK_JOBS } from "../mockData";
 
@@ -82,6 +82,10 @@ export function AuthManager({
   const [roleInput, setRoleInput] = useState<UserAccount["role"]>("Self-Advocate");
   const [disabilityInput, setDisabilityInput] = useState("general");
   const [bioInput, setBioInput] = useState("");
+  const [savedMomoNumberInput, setSavedMomoNumberInput] = useState("");
+  const [savedMomoProviderInput, setSavedMomoProviderInput] = useState<"MTN" | "Airtel">("MTN");
+  const [savedMomoNameInput, setSavedMomoNameInput] = useState("");
+  const [isEditingPayment, setIsEditingPayment] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [authSuccess, setAuthSuccess] = useState<string | null>(null);
@@ -91,6 +95,11 @@ export function AuthManager({
     if (currentSession) {
       setAuthView("profile");
       setBioInput(currentSession.bio || "");
+      setDisabilityInput(currentSession.prefDisabilityPreset || "general");
+      setSavedMomoNumberInput(currentSession.savedMomoNumber || "");
+      setSavedMomoProviderInput((currentSession.savedMomoProvider as "MTN" | "Airtel") || "MTN");
+      setSavedMomoNameInput(currentSession.savedMomoName || "");
+      setIsEditingPayment(!currentSession.savedMomoNumber);
     } else {
       setAuthView("login");
     }
@@ -180,6 +189,46 @@ export function AuthManager({
     }, 1500);
   };
 
+  const handleSavePaymentMethod = () => {
+    if (!currentSession) return;
+    if (!savedMomoNumberInput.trim()) {
+      setAuthError("Please enter a valid Mobile Money number.");
+      return;
+    }
+    const updated: UserAccount = {
+      ...currentSession,
+      savedMomoNumber: savedMomoNumberInput.trim(),
+      savedMomoProvider: savedMomoProviderInput,
+      savedMomoName: savedMomoNameInput.trim() || undefined,
+    };
+    setAccounts(prev => prev.map(a => a.id === currentSession.id ? updated : a));
+    onUpdateProfile(updated);
+    setAuthSuccess("Payment method saved securely for faster future checkout!");
+    setIsEditingPayment(false);
+    setTimeout(() => {
+      setAuthSuccess(null);
+    }, 3000);
+  };
+
+  const handleRemovePaymentMethod = () => {
+    if (!currentSession) return;
+    const updated: UserAccount = {
+      ...currentSession,
+      savedMomoNumber: undefined,
+      savedMomoProvider: undefined,
+      savedMomoName: undefined,
+    };
+    setSavedMomoNumberInput("");
+    setSavedMomoNameInput("");
+    setAccounts(prev => prev.map(a => a.id === currentSession.id ? updated : a));
+    onUpdateProfile(updated);
+    setAuthSuccess("Saved payment method removed successfully.");
+    setIsEditingPayment(true);
+    setTimeout(() => {
+      setAuthSuccess(null);
+    }, 3000);
+  };
+
   const handleUpdateProfileLocal = (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentSession) return;
@@ -189,6 +238,9 @@ export function AuthManager({
       ...currentSession,
       bio: bioInput.trim(),
       prefDisabilityPreset: disabilityInput,
+      savedMomoNumber: savedMomoNumberInput.trim() || undefined,
+      savedMomoProvider: savedMomoNumberInput.trim() ? savedMomoProviderInput : undefined,
+      savedMomoName: savedMomoNameInput.trim() || undefined,
     };
 
     // Update in our master accounts list
@@ -604,6 +656,138 @@ export function AuthManager({
                       </div>
                     );
                   })}
+                </div>
+              )}
+            </div>
+
+            {/* Saved Payment Methods Section */}
+            <div className={`p-4 rounded-xl border ${styles.cardInner} space-y-3`}>
+              <h4 className={`${styles.heading} text-xs uppercase tracking-wider font-extrabold flex items-center justify-between`}>
+                <span className="flex items-center gap-1.5">
+                  <CreditCard className="w-4 h-4 text-cyan-400" />
+                  Saved Mobile Wallet Methods
+                </span>
+                <span className="text-[9px] font-mono font-bold text-cyan-400 uppercase">Secure Storage</span>
+              </h4>
+
+              {currentSession.savedMomoNumber && !isEditingPayment ? (
+                <div className="space-y-3">
+                  <div className="p-3 bg-slate-950/60 border border-slate-850 rounded-xl flex items-center justify-between animate-entrance">
+                    <div className="flex items-center gap-2.5">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-[9px] ${
+                        currentSession.savedMomoProvider === "MTN" ? "bg-amber-400 text-black" : "bg-red-650 text-white"
+                      }`}>
+                        {currentSession.savedMomoProvider === "MTN" ? "MTN" : "Airtel"}
+                      </div>
+                      <div>
+                        <span className="text-xs font-bold text-white block">
+                          {currentSession.savedMomoProvider === "MTN" ? "MTN MoMo Account" : "Airtel Money"}
+                        </span>
+                        <span className="text-[10px] tracking-wider text-slate-400 font-mono font-bold block">
+                          {currentSession.savedMomoNumber}
+                        </span>
+                        {currentSession.savedMomoName && (
+                          <span className="text-[9px] text-slate-550 font-sans block">
+                            Holder: {currentSession.savedMomoName}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingPayment(true)}
+                        className="p-1 px-2.5 bg-slate-900 border border-slate-850 hover:border-slate-800 text-slate-300 rounded font-bold text-[10px] transition-all cursor-pointer"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleRemovePaymentMethod}
+                        className="p-1 px-2 bg-rose-955/40 border border-rose-900/60 hover:bg-rose-950/80 text-rose-400 rounded font-bold text-[10px] flex items-center gap-1 transition-all cursor-pointer"
+                        title="Delete saved payment method"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-slate-550 font-sans leading-relaxed">
+                    ✓ This mobile wallet number is set as default. Payments will automatically pull this verification address for lightning fast checkout.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3 bg-slate-950/40 p-3 rounded-xl border border-slate-900 animate-entrance">
+                  <div className="space-y-1.5">
+                    <span className="text-[9px] uppercase font-mono tracking-wider text-slate-500 block font-bold">Preferred Operator</span>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSavedMomoProviderInput("MTN")}
+                        className={`p-2 rounded-lg border text-[11px] font-mono flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                          savedMomoProviderInput === "MTN"
+                            ? "bg-amber-955/40 border-amber-500/80 text-amber-400 font-bold"
+                            : "bg-slate-950/50 border-slate-855 hover:border-slate-800 text-slate-400"
+                        }`}
+                      >
+                        <span className="w-4 h-4 rounded-full bg-amber-400 flex items-center justify-center text-black font-extrabold text-[8px]">M</span>
+                        MTN MoMo
+                      </button>
+                      
+                      <button
+                        type="button"
+                        onClick={() => setSavedMomoProviderInput("Airtel")}
+                        className={`p-2 rounded-lg border text-[11px] font-mono flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                          savedMomoProviderInput === "Airtel"
+                            ? "bg-red-955/40 border-red-500/80 text-red-00 font-bold"
+                            : "bg-slate-950/50 border-slate-855 hover:border-slate-800 text-slate-400"
+                        }`}
+                      >
+                        <span className="w-4 h-4 rounded-full bg-red-600 flex items-center justify-center text-white font-extrabold text-[8px]">A</span>
+                        Airtel Money
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] uppercase font-mono tracking-wider text-slate-500 block font-bold font-sans">Mobile Wallet Number</label>
+                    <input
+                      type="tel"
+                      value={savedMomoNumberInput}
+                      onChange={(e) => setSavedMomoNumberInput(e.target.value)}
+                      placeholder="e.g. 078XXXXXXX or 072XXXXXXX"
+                      className="w-full px-2 py-1.5 bg-slate-950 border border-slate-805 focus:border-cyan-500 text-white rounded text-xs font-mono outline-none"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] uppercase font-mono tracking-wider text-slate-500 block font-bold font-sans">Subscriber Name (Optional)</label>
+                    <input
+                      type="text"
+                      value={savedMomoNameInput}
+                      onChange={(e) => setSavedMomoNameInput(e.target.value)}
+                      placeholder="e.g. Jean d'Amour"
+                      className="w-full px-2 py-1.5 bg-slate-950 border border-slate-805 focus:border-cyan-500 text-white rounded text-xs outline-none"
+                    />
+                  </div>
+
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={handleSavePaymentMethod}
+                      className="flex-1 py-1.5 bg-cyan-600 hover:bg-cyan-555 text-white rounded font-bold text-[10px] transition-all cursor-pointer flex items-center justify-center gap-1"
+                    >
+                      <Check className="w-3.5 h-3.5" /> Save Mobile Wallet
+                    </button>
+                    {currentSession?.savedMomoNumber && (
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingPayment(false)}
+                        className="px-3 py-1.5 bg-slate-900 border border-slate-850 hover:border-slate-800 text-slate-400 hover:text-white rounded font-bold text-[10px] transition-all cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
